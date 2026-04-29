@@ -76,12 +76,23 @@ export default function App() {
     });
   };
 
+  const handleForexChange = (e) => {
+    const { name, value } = e.target;
+    setForex(prev => ({ ...prev, [name]: name === 'amount' ? formatInputNumber(value) : value }));
+  };
+
   const numMonthly = parseInputNumber(inputs.monthlySalary);
   const totalSalary = (numMonthly * (inputs.isJapanPartner ? 1 : inputs.multiplier)) + parseInputNumber(inputs.additionalCash) + parseInputNumber(inputs.signupBonus);
   const feePercent = inputs.feePercent === 'custom' ? (parseFloat(inputs.customFee) / 100 || 0) : parseFloat(inputs.feePercent);
   const baseGrossFee = totalSalary * feePercent;
   const deduction = inputs.isJapanPartner ? Math.min(baseGrossFee * 0.10, 400000 / (rates['JPY'] || 1)) : 0;
   const finalFee = (baseGrossFee - deduction) * inputs.billingType;
+
+  const formatMoney = (amount, curr = inputs.origCurrency) => 
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: curr, minimumFractionDigits: 2 }).format(amount);
+  
+  const formatNumber = (amount) => 
+    new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(amount);
 
   return (
     <div className="min-h-screen bg-[#f8faff] text-slate-800 font-sans pb-12 relative overflow-x-hidden">
