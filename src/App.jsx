@@ -1,273 +1,112 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Calculator, DollarSign, Save, RefreshCw, CheckCircle2, ArrowRightLeft, TrendingUp, MapPin, ChevronDown } from 'lucide-react';
+import { Calculator, DollarSign, RefreshCw, MapPin, ChevronDown, TrendingUp, ArrowRightLeft } from 'lucide-react';
 
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'CNY', 'HKD', 'NZD', 'THB', 'PHP', 'SGD', 'MYR', 'IDR', 'VND', 'INR', 'TWD', 'KRW', 'AED'];
 const MULTIPLIERS = [12, 13, 14, 15];
-const STANDARD_FEE_OPTIONS = [0.18, 0.20, 0.23, 0.25, 0.30, 'custom'];
-const JAPAN_FEE_OPTIONS = [0.25, 0.30, 0.35, 'custom'];
-const BILLING_TYPES = [{ label: '360 (Full)', value: 1 }, { label: 'Split 50/50', value: 0.5 }];
+const STANDARD_FEE = [0.18, 0.20, 0.23, 0.25, 0.30];
+const JAPAN_FEE = [0.25, 0.30, 0.35];
 
 export default function App() {
   const [inputs, setInputs] = useState({
     origCurrency: 'THB', monthlySalary: '', multiplier: 12, additionalCash: '',
-    signupBonus: '', feePercent: 0.23, customFee: '', billingType: 1,
-    isJapanPartner: false, target1: 'HKD', target2: 'USD', target3: 'PHP'
+    signupBonus: '', feePercent: 0.23, billingType: 1, isJapanPartner: false,
+    target1: 'HKD', target2: 'USD', target3: 'PHP'
   });
 
   const [rates, setRates] = useState({});
-  const [savingStatus, setSavingStatus] = useState('idle');
-  const [forex, setForex] = useState({ amount: '10,000', baseCurrency: 'USD', target1: 'EUR', target2: 'GBP', target3: 'JPY' });
+  const [forex, setForex] = useState({ amount: '10,000', baseCurrency: 'USD', t1: 'EUR', t2: 'GBP', t3: 'JPY' });
   const [forexRates, setForexRates] = useState({});
-  const [forexLastUpdate, setForexLastUpdate] = useState('');
 
-  const rainElements = useMemo(() => {
-    const symbolData = [{ sym: '$', color: '#15803d' }, { sym: '¥', color: '#b91c1c' }, { sym: '€', color: '#1d4ed8' }, { sym: '£', color: '#7e22ce' }, { sym: '฿', color: '#be185d' }];
-    return Array.from({ length: 30 }).map((_, i) => {
-      const data = symbolData[Math.floor(Math.random() * symbolData.length)];
-      return { id: i, symbol: data.sym, color: data.color, left: `${Math.random() * 100}%`, duration: `${15 + Math.random() * 20}s`, delay: `-${Math.random() * 20}s`, size: `${1 + Math.random() * 1.5}rem`, opacity: 0.1 };
-    });
-  }, []);
+  useEffect(() => {
+    fetch(`https://open.er-api.com/v6/latest/${inputs.origCurrency}`).then(res => res.json()).then(data => setRates(data.rates || {}));
+    fetch(`https://open.er-api.com/v6/latest/${forex.baseCurrency}`).then(res => res.json()).then(data => setForexRates(data.rates || {}));
+  }, [inputs.origCurrency, forex.baseCurrency]);
 
-  useEffect(() => { fetchRates(inputs.origCurrency); }, [inputs.origCurrency]);
-  useEffect(() => { fetchForexRates(forex.baseCurrency); }, [forex.baseCurrency]);
+  const parseNum = (val) => parseInt(val.toString().replace(/,/g, ''), 10) || 0;
+  const formatInp = (val) => val ? new Intl.NumberFormat('en-US').format(parseInt(val.toString().replace(/[^0-9]/g, ''), 10)) : '';
 
-  const fetchRates = async (base) => {
-    try {
-      const res = await fetch(`https://open.er-api.com/v6/latest/${base}`);
-      const data = await res.json();
-      setRates(data.rates || {});
-    } catch (e) { console.error(e); }
-  };
-
-  const fetchForexRates = async (base) => {
-    try {
-      const res = await fetch(`https://open.er-api.com/v6/latest/${base}`);
-      const data = await res.json();
-      setForexRates(data.rates || {});
-      if (data.time_last_update_utc) setForexLastUpdate(new Date(data.time_last_update_utc).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }));
-    } catch (e) { console.error(e); }
-  };
-
-  const formatInputNumber = (val) => {
-    if (!val) return '';
-    const clean = val.toString().replace(/[^0-9]/g, '');
-    return clean ? new Intl.NumberFormat('en-US').format(parseInt(clean, 10)) : '';
-  };
-
-  const parseInputNumber = (val) => val ? parseInt(val.toString().replace(/,/g, ''), 10) || 0 : 0;
-
-  const handleInputChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setInputs(prev => {
-      const next = { ...prev };
-      if (type === 'checkbox') {
-        next[name] = checked;
-        if (name === 'isJapanPartner') {
-          if (checked) next.origCurrency = 'JPY';
-          const options = checked ? JAPAN_FEE_OPTIONS : STANDARD_FEE_OPTIONS;
-          if (!options.includes(prev.feePercent) && prev.feePercent !== 'custom') next.feePercent = options[0];
-        }
-      } else if (['monthlySalary', 'additionalCash', 'signupBonus'].includes(name)) {
-        next[name] = formatInputNumber(value);
-      } else {
-        next[name] = value;
-      }
-      return next;
-    });
-  };
-
-  const numMonthly = parseInputNumber(inputs.monthlySalary);
-  const totalSalary = (numMonthly * (inputs.isJapanPartner ? 1 : inputs.multiplier)) + parseInputNumber(inputs.additionalCash) + parseInputNumber(inputs.signupBonus);
-  const feePercent = inputs.feePercent === 'custom' ? (parseFloat(inputs.customFee) / 100 || 0) : parseFloat(inputs.feePercent);
-  const baseGrossFee = totalSalary * feePercent;
-  const deduction = inputs.isJapanPartner ? Math.min(baseGrossFee * 0.10, 400000 / (rates['JPY'] || 1)) : 0;
-  const finalFee = (baseGrossFee - deduction) * inputs.billingType;
+  const numMonthly = parseNum(inputs.monthlySalary);
+  const totalSal = (numMonthly * (inputs.isJapanPartner ? 1 : inputs.multiplier)) + parseNum(inputs.additionalCash) + parseNum(inputs.signupBonus);
+  const baseGross = totalSal * inputs.feePercent;
+  const deduction = inputs.isJapanPartner ? Math.min(baseGross * 0.10, 400000 / (rates['JPY'] || 1)) : 0;
+  const finalFee = (baseGross - deduction) * inputs.billingType;
 
   return (
-    <div className="min-h-screen bg-[#f8faff] text-slate-800 font-sans pb-12 relative overflow-x-hidden">
-      <style>{`
-        @keyframes fall { 0% { transform: translateY(-10vh) rotate(0deg); } 100% { transform: translateY(110vh) rotate(360deg); } }
-        .money-rain { position: absolute; top: -10%; animation-name: fall; animation-timing-function: linear; animation-iteration-count: infinite; user-select: none; }
-        select { appearance: none; }
-      `}</style>
-      
-      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-        {rainElements.map(el => (
-          <div key={el.id} className="money-rain font-black" style={{ left: el.left, color: el.color, animationDuration: el.duration, animationDelay: el.delay, fontSize: el.size, opacity: el.opacity }}>{el.symbol}</div>
-        ))}
-      </div>
-
-      <div className="relative z-10 max-w-6xl mx-auto p-4 md:p-8 space-y-6">
-        <header className="flex flex-col md:flex-row justify-between items-center bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
+    <div className="min-h-screen bg-[#f8faff] p-4 md:p-8 font-sans">
+      <div className="max-w-6xl mx-auto space-y-6">
+        
+        {/* Header */}
+        <header className="flex justify-between items-center bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
           <div className="flex items-center gap-4">
-            <div className="p-3 bg-[#a855f7] rounded-2xl text-white shadow-lg shadow-purple-200"><Calculator size={28} /></div>
-            <h1 className="text-2xl md:text-3xl font-black tracking-tight text-[#1e293b]">Recruitment Billing Calculator</h1>
+            <div className="p-3 bg-[#a855f7] rounded-2xl text-white"><Calculator size={28} /></div>
+            <h1 className="text-2xl font-black text-slate-800">Recruitment Billing Calculator</h1>
           </div>
-          <div className="mt-4 md:mt-0 flex gap-3">
-             <button onClick={() => setInputs({ origCurrency: 'THB', monthlySalary: '', multiplier: 12, additionalCash: '', signupBonus: '', feePercent: 0.23, customFee: '', billingType: 1, isJapanPartner: false, target1: 'HKD', target2: 'USD', target3: 'PHP' })} className="px-6 py-2.5 bg-white border border-slate-200 text-slate-500 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all"><RefreshCw size={18} /></button>
-             <button className="px-8 py-2.5 bg-[#4f46e5] text-white rounded-xl shadow-lg font-bold text-sm transition-all hover:scale-[1.02]">Save to Sheet</button>
-          </div>
+          <button onClick={() => window.location.reload()} className="p-3 bg-slate-50 text-slate-400 rounded-xl hover:bg-slate-100"><RefreshCw size={20} /></button>
         </header>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* Form */}
           <div className="lg:col-span-7 space-y-6">
-            <div className={`p-5 rounded-3xl border transition-all ${inputs.isJapanPartner ? 'bg-[#fdf2f8] border-pink-100' : 'bg-white border-slate-100'}`}>
+            <div className={`p-5 rounded-3xl border transition-all ${inputs.isJapanPartner ? 'bg-pink-50 border-pink-100' : 'bg-white border-slate-100'}`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <div className={`p-2.5 rounded-xl ${inputs.isJapanPartner ? 'bg-pink-500 text-white shadow-md shadow-pink-100' : 'bg-slate-50 text-slate-400'}`}><MapPin size={22} /></div>
-                  <div><h3 className="font-bold text-slate-800">Japan Partner Billing (R&R Ltd)</h3><p className="text-[11px] text-slate-500 leading-tight">10% deduction (max 400k JPY) applied to fee.</p></div>
+                  <div className={`p-2.5 rounded-xl ${inputs.isJapanPartner ? 'bg-pink-500 text-white' : 'bg-slate-50 text-slate-400'}`}><MapPin size={22} /></div>
+                  <div><h3 className="font-bold text-slate-800">Japan Partner Billing (R&R Ltd)</h3><p className="text-xs text-slate-500">10% deduction applies.</p></div>
                 </div>
-                <label className="relative inline-flex items-center cursor-pointer group">
-                  <input type="checkbox" name="isJapanPartner" checked={inputs.isJapanPartner} onChange={handleInputChange} className="sr-only peer" />
-                  <div className="w-12 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-6 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-500"></div>
-                </label>
+                <input type="checkbox" checked={inputs.isJapanPartner} onChange={(e) => setInputs({...inputs, isJapanPartner: e.target.checked, origCurrency: e.target.checked ? 'JPY' : inputs.origCurrency})} className="w-6 h-6 accent-indigo-600" />
               </div>
             </div>
 
             <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm space-y-6">
               <h2 className="text-sm font-black text-[#4f46e5] uppercase tracking-widest flex items-center gap-2"><DollarSign size={18} /> Salary Details</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                   <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Currency</label>
-                   <div className="relative">
-                    <select name="origCurrency" value={inputs.origCurrency} onChange={handleInputChange} disabled={inputs.isJapanPartner} className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-slate-700 outline-none">
-                      {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                    <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                   </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Currency</label>
+                  <select value={inputs.origCurrency} onChange={(e) => setInputs({...inputs, origCurrency: e.target.value})} className="w-full p-3 bg-slate-50 rounded-xl font-bold border-none">{CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}</select>
                 </div>
-                <div className="space-y-2">
-                   <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Multiplier</label>
-                   <div className="relative">
-                    <select name="multiplier" value={inputs.isJapanPartner ? 1 : inputs.multiplier} onChange={handleInputChange} disabled={inputs.isJapanPartner} className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-slate-700 outline-none">
-                      {MULTIPLIERS.map(m => <option key={m} value={m}>x{m} months</option>)}
-                    </select>
-                    <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                   </div>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Multiplier</label>
+                  <select value={inputs.multiplier} onChange={(e) => setInputs({...inputs, multiplier: parseInt(e.target.value)})} className="w-full p-3 bg-slate-50 rounded-xl font-bold border-none">{MULTIPLIERS.map(m => <option key={m} value={m}>x{m} months</option>)}</select>
                 </div>
-                <div className="md:col-span-2 space-y-2">
-                   <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Base Salary</label>
-                   <input type="text" name="monthlySalary" value={inputs.monthlySalary} onChange={handleInputChange} placeholder="Required" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-black text-xl text-slate-700 focus:bg-white outline-none transition-all" />
-                </div>
-                <div className="space-y-2">
-                   <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Additional</label>
-                   <input type="text" name="additionalCash" value={inputs.additionalCash} onChange={handleInputChange} className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-slate-600 outline-none" />
-                </div>
-                <div className="space-y-2">
-                   <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Signup Bonus</label>
-                   <input type="text" name="signupBonus" value={inputs.signupBonus} onChange={handleInputChange} className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-slate-600 outline-none" />
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm space-y-6">
-              <h2 className="text-sm font-black text-pink-500 uppercase tracking-widest flex items-center gap-2"><TrendingUp size={18} /> Fee Structure</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                   <label className="text-[10px] font-black text-slate-400 uppercase ml-1 tracking-wider">Recruitment Fee %</label>
-                   <div className="relative">
-                    <select name="feePercent" value={inputs.feePercent} onChange={handleInputChange} className="w-full p-3.5 bg-[#fff1f2] border border-pink-50 rounded-2xl font-black text-pink-700 outline-none">
-                      {(inputs.isJapanPartner ? JAPAN_FEE_OPTIONS : STANDARD_FEE_OPTIONS).map(f => (
-                        <option key={f} value={f}>{f === 'custom' ? 'Custom %' : `${(f * 100).toFixed(0)}%`}</option>
-                      ))}
-                    </select>
-                    <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-pink-300 pointer-events-none" />
-                   </div>
-                </div>
-                <div className="space-y-2">
-                   <label className="text-[10px] font-black text-slate-400 uppercase ml-1 tracking-wider">Billing Type</label>
-                   <div className="relative">
-                    <select name="billingType" value={inputs.billingType} onChange={handleInputChange} className="w-full p-3.5 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-slate-700 outline-none">
-                      {BILLING_TYPES.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
-                    </select>
-                    <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                   </div>
+                <div className="col-span-2 space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Monthly Salary</label>
+                  <input type="text" value={inputs.monthlySalary} onChange={(e) => setInputs({...inputs, monthlySalary: formatInp(e.target.value)})} placeholder="Required" className="w-full p-4 bg-slate-50 rounded-xl font-black text-xl border-none outline-none focus:ring-2 focus:ring-indigo-100" />
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="lg:col-span-5 space-y-8">
-            <div className="bg-[#1e293b] p-8 rounded-[2.5rem] shadow-2xl text-white border border-slate-700 relative overflow-hidden">
-              <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-8">Total Summary</h2>
+          {/* Navy Summary */}
+          <div className="lg:col-span-5">
+            <div className="bg-[#1e293b] p-8 rounded-[2.5rem] shadow-2xl text-white border border-slate-700 relative overflow-hidden h-full">
+              <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-8">Total Summary</h2>
               <div className="space-y-6">
-                <div className="flex justify-between items-end border-b border-slate-700/50 pb-4"><span className="text-slate-400 text-xs font-bold uppercase">Billable Salary</span><span className="text-xl font-black tracking-tight">{formatMoney(totalSalary)}</span></div>
-                <div className="flex justify-between items-end border-b border-slate-700/50 pb-4"><span className="text-slate-400 text-xs font-bold uppercase">Gross Fee</span><span className="text-xl font-black tracking-tight">{formatMoney(baseGrossFee)}</span></div>
-                {inputs.isJapanPartner && (
-                  <div className="flex justify-between items-end border-b border-pink-900/40 pb-4">
-                    <span className="text-pink-400 text-[10px] font-black uppercase tracking-widest">Partner Deduction</span>
-                    <span className="text-lg font-black text-pink-400">-{formatMoney(deduction)}</span>
-                  </div>
-                )}
-                <div className="pt-6 relative">
-                  <span className="block text-slate-200 text-sm font-black mb-1">Final Billing</span>
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-[10px] text-indigo-400 font-bold uppercase tracking-widest">({inputs.billingType === 1 ? '360 Full' : 'Split'})</span>
-                    <span className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 to-pink-300 drop-shadow-sm">{formatMoney(finalFee)}</span>
-                  </div>
+                <div className="flex justify-between items-end border-b border-slate-700 pb-4"><span className="text-slate-400 text-xs font-bold uppercase">Base Fee</span><span className="text-xl font-black">{new Intl.NumberFormat('en-US', {style:'currency', currency: inputs.origCurrency}).format(baseGross)}</span></div>
+                <div className="pt-6 text-right">
+                  <span className="block text-slate-400 text-sm font-black mb-1">Final Billing</span>
+                  <div className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 to-pink-300">{new Intl.NumberFormat('en-US', {style:'currency', currency: inputs.origCurrency}).format(finalFee)}</div>
                 </div>
               </div>
-            </div>
-
-            <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm relative space-y-6">
-               <h2 className="text-sm font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2"><ArrowRightLeft size={18} /> Live Conversions</h2>
-                {[1, 2, 3].map(idx => (
-                  <div key={idx} className="flex items-center justify-between p-3 rounded-2xl hover:bg-slate-50 transition-all group">
-                    <div className="relative">
-                      <select name={`target${idx}`} value={inputs[`target${idx}`]} onChange={handleInputChange} className="pl-3 pr-8 py-1.5 bg-slate-100 border-none rounded-xl text-xs font-black text-slate-600 outline-none cursor-pointer">
-                        {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                      <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                    </div>
-                    <div className="text-right">
-                      <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest block mb-1">{inputs[`target${idx}`]} Equivalent</span>
-                      <div className="text-2xl font-black text-slate-800 tracking-tighter">
-                        {formatNumber(finalFee * (rates[inputs[`target${idx}`]] || 0))}
-                      </div>
-                    </div>
-                  </div>
-                ))}
             </div>
           </div>
         </div>
 
-        <div className="mt-12 bg-white rounded-[3rem] p-10 border border-slate-100 shadow-xl relative overflow-hidden group">
-          <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"></div>
-          <div className="flex flex-col md:flex-row justify-between items-center mb-10 gap-8">
-            <div className="flex items-center gap-3">
-              <span className="text-6xl font-black text-[#1e293b] tracking-tighter leading-none">RAS</span>
-              <div className="w-1.5 h-12 bg-pink-500 rounded-full"></div>
-              <div className="flex flex-col font-black text-slate-400 uppercase text-xs tracking-widest"><span>Currency</span><span>Converter</span></div>
-            </div>
-            <div className="text-right"><span className="text-[10px] font-black text-slate-300 uppercase mb-1 block tracking-widest">DATE</span><div className="border-b-2 border-slate-100 pb-1 px-4 text-sm font-black text-slate-600">{forexLastUpdate || 'LIVE MARKET RATE'}</div></div>
+        {/* Cheque Footer */}
+        <div className="bg-white rounded-[3rem] p-10 border border-slate-100 shadow-xl relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-indigo-500 to-pink-500"></div>
+          <div className="flex items-center gap-3 mb-8">
+            <span className="text-6xl font-black text-[#1e293b] tracking-tighter">RAS</span>
+            <div className="w-1.5 h-12 bg-pink-500 rounded-full"></div>
+            <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Currency<br/>Converter</span>
           </div>
-          <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-[1.5rem] border border-slate-100 shadow-inner mb-12">
-            <div className="relative">
-              <select name="baseCurrency" value={forex.baseCurrency} onChange={(e) => setForex({...forex, baseCurrency: e.target.value})} className="pl-4 pr-10 py-2 bg-white border-none rounded-xl font-black text-xl text-indigo-600 shadow-sm outline-none">
-                {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-              <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-indigo-300" />
-            </div>
-            <input type="text" value={forex.amount} onChange={(e) => setForex({...forex, amount: formatInputNumber(e.target.value)})} className="bg-transparent text-4xl font-black text-right w-full outline-none pr-4" placeholder="0" />
+          <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-2xl mb-8">
+            <select value={forex.baseCurrency} onChange={(e) => setForex({...forex, baseCurrency: e.target.value})} className="bg-white p-2 rounded-lg font-black text-indigo-600">{CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}</select>
+            <input type="text" value={forex.amount} onChange={(e) => setForex({...forex, amount: formatInp(e.target.value)})} className="bg-transparent text-4xl font-black text-right w-full outline-none" />
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-12 mb-12">
-            {[forex.target1, forex.target2, forex.target3].map((curr, i) => {
-              const rate = forexRates[curr] || 0;
-              return (
-                <div key={i} className="flex flex-col border-b border-dashed border-slate-200 pb-4">
-                  <div className="flex justify-between items-center mb-3">
-                    <span className="font-black text-slate-500 uppercase tracking-widest text-sm">{curr}</span>
-                    <span className="text-[10px] font-bold text-slate-300">FX: {rate?.toFixed(4)}</span>
-                  </div>
-                  <div className="text-3xl font-black text-slate-800 tracking-tighter tabular-nums">{formatNumber(parseInputNumber(forex.amount) * rate)}</div>
-                </div>
-              );
-            })}
-          </div>
-          <div className="flex flex-col items-center">
-            <div className="font-serif text-5xl text-slate-700/80 italic transform -rotate-1 select-none mb-1">Elon Musk</div>
-            <div className="w-64 h-0.5 bg-slate-200 mb-1"></div>
-            <span className="text-[9px] font-black text-slate-300 uppercase tracking-[0.3em]">Authorized Signature</span>
+          <div className="flex flex-col items-center border-t border-slate-100 pt-8">
+             <div className="font-serif text-5xl text-slate-700/80 italic transform -rotate-1 mb-2">Elon Musk</div>
+             <div className="w-64 h-px bg-slate-200"></div>
+             <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest mt-1">Authorized Signature</span>
           </div>
         </div>
       </div>
